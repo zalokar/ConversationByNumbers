@@ -13,10 +13,9 @@ using TaleWorlds.Localization;
 
 namespace ConversationByNumbers
 {
-    [HarmonyPatch(typeof(MissionGauntletConversationView), nameof(MissionGauntletConversationView.OnMissionScreenTick))]
-    class MissionConversationPatch
+    class ConversationInputHandler
     {
-        static void Postfix(float dt, ref MissionConversationVM ____dataSource)
+        public static void HandleConversationInput(ref MissionConversationVM missionConversationVm)
         {
             int numRowKeyPressedCode = Input.GetFirstKeyPressedInRange((int)InputKey.D1);
             int numPadKeyPressedCode = Input.GetFirstKeyPressedInRange((int)InputKey.Numpad1);
@@ -25,15 +24,17 @@ namespace ConversationByNumbers
             if (numRowKeyPressedCode >= (int)InputKey.D1 && numRowKeyPressedCode <= (int)InputKey.D9)
             {
                 answerIndex = numRowKeyPressedCode - 2;
-            } else if (numPadKeyPressedCode >= (int)InputKey.Numpad1 && numPadKeyPressedCode <= (int)InputKey.Numpad9)
+            }
+            else if (numPadKeyPressedCode >= (int)InputKey.Numpad1 && numPadKeyPressedCode <= (int)InputKey.Numpad9)
             {
                 answerIndex = numPadKeyPressedCode - 79;
-            } else
+            }
+            else
             {
                 return;
             }
 
-            var dataSource = Traverse.Create(____dataSource).GetValue<MissionConversationVM>();
+            var dataSource = Traverse.Create(missionConversationVm).GetValue<MissionConversationVM>();
             var answerListLength = dataSource.AnswerList.Count;
             if (answerIndex < 0 || answerIndex >= answerListLength)
             {
@@ -44,9 +45,18 @@ namespace ConversationByNumbers
             {
                 return;
             }
-            
+
             var OnSelectOption = AccessTools.Method(typeof(MissionConversationVM), "OnSelectOption");
-            OnSelectOption.Invoke(____dataSource, new object[] { answerIndex });
+            OnSelectOption.Invoke(missionConversationVm, new object[] { answerIndex });
+        }
+    }
+
+    [HarmonyPatch(typeof(MissionGauntletConversationView), nameof(MissionGauntletConversationView.OnMissionScreenTick))]
+    class MissionConversationPatch
+    {
+        static void Postfix(float dt, ref MissionConversationVM ____dataSource)
+        {
+            ConversationInputHandler.HandleConversationInput(ref ____dataSource);
         }
     }
 
@@ -55,36 +65,8 @@ namespace ConversationByNumbers
     {
         static void Postfix(ref MapConversationVM ____dataSource)
         {
-            int numRowKeyPressedCode = Input.GetFirstKeyPressedInRange((int)InputKey.D1);
-            int numPadKeyPressedCode = Input.GetFirstKeyPressedInRange((int)InputKey.Numpad1);
-            int answerIndex = -1;
-
-            if (numRowKeyPressedCode >= (int)InputKey.D1 && numRowKeyPressedCode <= (int)InputKey.D9)
-            {
-                answerIndex = numRowKeyPressedCode - 2;
-            } else if (numPadKeyPressedCode >= (int)InputKey.Numpad1 && numPadKeyPressedCode <= (int)InputKey.Numpad9)
-            {
-                answerIndex = numPadKeyPressedCode - 79;
-            } else
-            {
-                return;
-            }
-
-            var traverse = Traverse.Create(____dataSource);
-            var dialogController = traverse.Field("_dialogController").GetValue<MissionConversationVM>();
-            var answerListLength = dialogController.AnswerList.Count;
-            if (answerIndex < 0 || answerIndex >= answerListLength)
-            {
-                return;
-            }
-
-            if (!dialogController.AnswerList[answerIndex].IsEnabled)
-            {
-                return;
-            }
-
-            var OnSelectOption = AccessTools.Method(typeof(MissionConversationVM), "OnSelectOption");
-            OnSelectOption.Invoke(dialogController, new object[] { answerIndex });
+            var dialogController = Traverse.Create(____dataSource).Field("_dialogController").GetValue<MissionConversationVM>();
+            ConversationInputHandler.HandleConversationInput(ref dialogController);
         }
     }
 
