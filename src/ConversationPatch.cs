@@ -10,16 +10,17 @@ using TaleWorlds.CampaignSystem.ViewModelCollection.Map.MapConversation;
 using TaleWorlds.InputSystem;
 using TaleWorlds.Library;
 using TaleWorlds.Localization;
+using TaleWorlds.MountAndBlade;
 
 namespace ConversationByNumbers
 {
     class ConversationInputHandler
     {
-        public static void HandleConversationInput(ref MissionConversationVM missionConversationVm)
+        public static void HandleConversationInput(ref MissionConversationVM dataSource, bool isBarterActive)
         {
             int numRowKeyPressedCode = Input.GetFirstKeyPressedInRange((int)InputKey.D1);
             int numPadKeyPressedCode = Input.GetFirstKeyPressedInRange((int)InputKey.Numpad1);
-            int answerIndex = -1;
+            int answerIndex;
 
             if (numRowKeyPressedCode >= (int)InputKey.D1 && numRowKeyPressedCode <= (int)InputKey.D9)
             {
@@ -34,39 +35,49 @@ namespace ConversationByNumbers
                 return;
             }
 
-            var dataSource = Traverse.Create(missionConversationVm).GetValue<MissionConversationVM>();
             var answerListLength = dataSource.AnswerList.Count;
+
+            // allow numkeys to continue conversation
+            if (answerListLength <= 0 && !isBarterActive)
+            {
+                var ExecuteContinue = AccessTools.Method(typeof(MissionConversationVM), nameof(MissionConversationVM.ExecuteContinue));
+                ExecuteContinue.Invoke(dataSource, new object[] { });
+                return;
+            }
+
             if (answerIndex < 0 || answerIndex >= answerListLength)
             {
                 return;
             }
 
+            // only allow selecting options that aren't greyed out
             if (!dataSource.AnswerList[answerIndex].IsEnabled)
             {
                 return;
             }
 
             var OnSelectOption = AccessTools.Method(typeof(MissionConversationVM), "OnSelectOption");
-            OnSelectOption.Invoke(missionConversationVm, new object[] { answerIndex });
+            OnSelectOption.Invoke(dataSource, new object[] { answerIndex });
         }
     }
 
     [HarmonyPatch(typeof(MissionGauntletConversationView), nameof(MissionGauntletConversationView.OnMissionScreenTick))]
     class MissionConversationPatch
     {
-        static void Postfix(float dt, ref MissionConversationVM ____dataSource)
+        static void Postfix(float dt, ref MissionGauntletConversationView __instance, ref MissionConversationVM ____dataSource)
         {
-            ConversationInputHandler.HandleConversationInput(ref ____dataSource);
+            bool isBarterActive = __instance.Mission.Mode == TaleWorlds.Core.MissionMode.Barter;
+            ConversationInputHandler.HandleConversationInput(ref ____dataSource, isBarterActive);
         }
     }
 
     [HarmonyPatch(typeof(GauntletMapConversationView), "Tick")]
     class MapConversationPatch
     {
-        static void Postfix(ref MapConversationVM ____dataSource)
+        static void Postfix(ref bool ____isBarterActive, ref MapConversationVM ____dataSource)
         {
             var dialogController = Traverse.Create(____dataSource).Field("_dialogController").GetValue<MissionConversationVM>();
-            ConversationInputHandler.HandleConversationInput(ref dialogController);
+            ConversationInputHandler.HandleConversationInput(ref dialogController, ____isBarterActive);
         }
     }
 
