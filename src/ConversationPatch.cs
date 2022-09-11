@@ -84,53 +84,59 @@ namespace ConversationByNumbers
     [HarmonyPatch(typeof(MissionConversationVM), "Refresh")]
     class NumbersToAnswersPatch
     {
-        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator gen)
         {
-            var setForceCameraToTurnToPlayer = AccessTools.Method(typeof(ConversationManager), "set_ForceCameraToTurnToPlayer");
-            var foundInstructionBeforeLoop = false;
-            var foundInstructionInsideLoop = false;
+            // anchors for transpiler to insert new code
+            bool foundLdfldConversationManager = false;
+            bool foundCallvirtGetItem = false;
+
+            // what to look for in instructions
+            var fieldConversationManager = AccessTools.Field(typeof(MissionConversationVM), "_conversationManager");
+            var virtGetItem = AccessTools.Method(typeof(List<ConversationSentenceOption>), "get_Item");
 
             foreach (var instruction in instructions)
             {
-                if (instruction.opcode == OpCodes.Callvirt && instruction.operand == (object)setForceCameraToTurnToPlayer)
-                {
-                    foundInstructionBeforeLoop = true;
-                }
-
-                if (!foundInstructionInsideLoop && foundInstructionBeforeLoop && instruction.opcode == OpCodes.Ldarg_0)
-                {
-                    // X = i + ". "
-                    yield return new CodeInstruction(OpCodes.Ldloc, 6);
-                    yield return new CodeInstruction(OpCodes.Ldstr, ". ");
-                    yield return new CodeInstruction(OpCodes.Box, typeof(Int32));
-                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(string), nameof(String.Concat), parameters: new Type[] { typeof(object), typeof(object) }));
-
-                    // X += this._conversationManager.CurOptions[i].Text.ToString()
-                    yield return new CodeInstruction(OpCodes.Ldarg_0);
-                    yield return new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(MissionConversationVM), "_conversationManager"));
-                    yield return new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ConversationManager), "get_CurOptions"));
-                    yield return new CodeInstruction(OpCodes.Ldloc, 6);
-                    yield return new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(List<ConversationSentenceOption>), "get_Item"));
-                    yield return new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(ConversationSentenceOption), nameof(ConversationSentenceOption.Text)));
-                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(TextObject), nameof(TextObject.ToString)));
-                    yield return new CodeInstruction(OpCodes.Box, typeof(Int32));
-                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(String), nameof(String.Concat), parameters: new Type[] { typeof(object), typeof(object) }));
-
-                    // this._conversationManager.CurOptions[i].Text = X
-                    yield return new CodeInstruction(OpCodes.Ldarg_0);
-                    yield return new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(MissionConversationVM), "_conversationManager"));
-                    yield return new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ConversationManager), "get_CurOptions"));
-                    yield return new CodeInstruction(OpCodes.Ldloc, 6);
-                    yield return new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(List<ConversationSentenceOption>), "get_Item"));
-                    yield return new CodeInstruction(OpCodes.Stfld, AccessTools.Field(typeof(ConversationSentenceOption), nameof(ConversationSentenceOption.Text)));
-                    foundInstructionInsideLoop = true;
-                }
                 yield return instruction;
+
+                // find `ldfld ConversationManager`, then find `callvirt get_Item()`
+                if (instruction.LoadsField(fieldConversationManager))
+                {
+                    foundLdfldConversationManager = true;
+                }
+
+                if (!foundCallvirtGetItem && foundLdfldConversationManager && instruction.Calls(virtGetItem))
+                {
+                    LocalBuilder csoAddress = gen.DeclareLocal(typeof(ConversationSentenceOption));
+                    yield return new CodeInstruction(OpCodes.Stloc_S, 7);
+                    yield return new CodeInstruction(OpCodes.Ldloca_S, 7); // this address used by Stfld instruction below
+
+                    // given: ConversationSentenceOption temp = curOption[i];
+                    // temp.Text = new TextObject(i + ". " + x.Text.ToString());
+                    yield return new CodeInstruction(OpCodes.Ldloc_S, 6);
+                    yield return new CodeInstruction(OpCodes.Box, typeof(int));
+                    yield return new CodeInstruction(OpCodes.Ldstr, ". ");
+
+                    yield return new CodeInstruction(OpCodes.Ldloca_S, 7);
+                    yield return new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(ConversationSentenceOption), nameof(ConversationSentenceOption.Text)));
+                    yield return new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(object), nameof(Object.ToString)));
+                    yield return new CodeInstruction(
+                        OpCodes.Call, AccessTools.Method(typeof(String), nameof(String.Concat), parameters: new Type[] { typeof(object), typeof(object), typeof(object) })
+                    );
+
+                    yield return new CodeInstruction(OpCodes.Ldnull);
+                    yield return new CodeInstruction(OpCodes.Newobj, AccessTools.Constructor(typeof(TextObject), new Type[] { typeof(string), typeof(Dictionary<string, object>) }));
+
+                    yield return new CodeInstruction(OpCodes.Stfld, AccessTools.Field(typeof(ConversationSentenceOption), nameof(ConversationSentenceOption.Text)));
+                    
+                    yield return new CodeInstruction(OpCodes.Ldloc_S, 7);
+
+                    foundCallvirtGetItem = true;
+                }
             }
 
-            if (foundInstructionBeforeLoop is false)
+            if (foundLdfldConversationManager is false)
             {
-                throw new ArgumentException("Cannot find ConversationManager::set_ForceCameraToTurnToPlayer in Conversation.MissionConversationVM");
+                throw new ArgumentException("Cannot find field `_conversationManager` in Conversation.MissionConversationVM");
             }
         }
     }
