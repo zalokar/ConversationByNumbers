@@ -8,9 +8,7 @@ using TaleWorlds.CampaignSystem.Conversation;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Conversation;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Map.MapConversation;
 using TaleWorlds.InputSystem;
-using TaleWorlds.Library;
 using TaleWorlds.Localization;
-using TaleWorlds.MountAndBlade;
 
 namespace ConversationByNumbers
 {
@@ -135,6 +133,7 @@ namespace ConversationByNumbers
     [HarmonyPatch(typeof(MissionConversationVM), "Refresh")]
     class NumbersToAnswersPatch
     {
+        // patch MissionConversationVM::Refresh to insert number prompts into answers
         static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator gen)
         {
             // anchors for transpiler to insert new code
@@ -157,14 +156,15 @@ namespace ConversationByNumbers
 
                 if (!foundCallvirtGetItem && foundLdfldConversationManager && instruction.Calls(virtGetItem))
                 {
+                    // ConversationSentenceOption local_var_7 = this._conversationManager.CurOptions[i];
                     LocalBuilder csoAddress = gen.DeclareLocal(typeof(ConversationSentenceOption));
                     yield return new CodeInstruction(OpCodes.Stloc_S, 7);
                     yield return new CodeInstruction(OpCodes.Ldloca_S, 7); // this address used by Stfld instruction below
 
                     // TODO: there is potential edge case where i/local_var_6 goes past 9; in that case, skip string modding below
 
-                    // given: ConversationSentenceOption temp = curOption[i];
-                    // temp.Text = new TextObject(i + ". " + x.Text.ToString());
+                    // int j = (i + 1) % 10;
+                    // local_var_7.Text = new TextObject(j + ". " + x.Text.ToString());
                     yield return new CodeInstruction(OpCodes.Ldloc_S, 6);
                     yield return new CodeInstruction(OpCodes.Ldc_I4_1);
                     yield return new CodeInstruction(OpCodes.Add);
