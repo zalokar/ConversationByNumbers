@@ -16,25 +16,39 @@ namespace ConversationByNumbers
 {
     class ConversationInputHandler
     {
+        static List<InputKey> numRowKeys = new() {
+            InputKey.D0,
+            InputKey.D1,
+            InputKey.D2,
+            InputKey.D3,
+            InputKey.D4,
+            InputKey.D5,
+            InputKey.D6,
+            InputKey.D7,
+            InputKey.D8,
+            InputKey.D9
+        };
+        static List<InputKey> numPadKeys = new() {
+            InputKey.Numpad0,
+            InputKey.Numpad1,
+            InputKey.Numpad2,
+            InputKey.Numpad3,
+            InputKey.Numpad4,
+            InputKey.Numpad5,
+            InputKey.Numpad6,
+            InputKey.Numpad7,
+            InputKey.Numpad8,
+            InputKey.Numpad9
+        };
+
         public static void HandleConversationInput(ref MissionConversationVM dataSource, bool isBarterActive)
         {
-            int numRowKeyPressedCode = Input.GetFirstKeyPressedInRange((int)InputKey.D1);
-            int numPadKeyPressedCode = Input.GetFirstKeyPressedInRange((int)InputKey.Numpad1);
-            int answerIndex;
-
-            if (numRowKeyPressedCode >= (int)InputKey.D1 && numRowKeyPressedCode <= (int)InputKey.D9)
-            {
-                answerIndex = numRowKeyPressedCode - 2;
-            }
-            else if (numPadKeyPressedCode >= (int)InputKey.Numpad1 && numPadKeyPressedCode <= (int)InputKey.Numpad9)
-            {
-                answerIndex = numPadKeyPressedCode - 79;
-            }
-            else
+            if (dataSource == null)
             {
                 return;
             }
 
+            int answerIndex = GetAnswerIndexOfPressedNumKey();
             var answerListLength = dataSource.AnswerList.Count;
 
             // allow numkeys to continue conversation
@@ -58,6 +72,43 @@ namespace ConversationByNumbers
 
             var OnSelectOption = AccessTools.Method(typeof(MissionConversationVM), "OnSelectOption");
             OnSelectOption.Invoke(dataSource, new object[] { answerIndex });
+        }
+
+        private static int GetAnswerIndexOfPressedNumKey()
+        {
+            // number row keys are linear, but numpad keys are broken up by row
+            foreach (InputKey numRowKey in numRowKeys)
+            {
+                if (Input.IsKeyPressed(numRowKey)) {
+                    return (int)numRowKey - 2;
+                }
+            }
+
+            foreach (InputKey numPadKey in numPadKeys)
+            {
+                if (Input.IsKeyPressed(numPadKey))
+                {
+                    switch (numPadKey)
+                    {
+                        case InputKey.Numpad0:
+                            return 9;
+                        case InputKey.Numpad1:
+                        case InputKey.Numpad2:
+                        case InputKey.Numpad3:
+                            return (int)numPadKey - 79;
+                        case InputKey.Numpad4:
+                        case InputKey.Numpad5:
+                        case InputKey.Numpad6:
+                            return (int)numPadKey - 72;
+                        case InputKey.Numpad7:
+                        case InputKey.Numpad8:
+                        case InputKey.Numpad9:
+                            return (int)numPadKey - 65;
+                    }
+                }
+            }
+
+            return -1;
         }
     }
 
@@ -110,9 +161,15 @@ namespace ConversationByNumbers
                     yield return new CodeInstruction(OpCodes.Stloc_S, 7);
                     yield return new CodeInstruction(OpCodes.Ldloca_S, 7); // this address used by Stfld instruction below
 
+                    // TODO: there is potential edge case where i/local_var_6 goes past 9; in that case, skip string modding below
+
                     // given: ConversationSentenceOption temp = curOption[i];
                     // temp.Text = new TextObject(i + ". " + x.Text.ToString());
                     yield return new CodeInstruction(OpCodes.Ldloc_S, 6);
+                    yield return new CodeInstruction(OpCodes.Ldc_I4_1);
+                    yield return new CodeInstruction(OpCodes.Add);
+                    yield return new CodeInstruction(OpCodes.Ldc_I4_S, 10);
+                    yield return new CodeInstruction(OpCodes.Rem);
                     yield return new CodeInstruction(OpCodes.Box, typeof(int));
                     yield return new CodeInstruction(OpCodes.Ldstr, ". ");
 
