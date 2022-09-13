@@ -164,7 +164,7 @@ namespace ConversationByNumbers
                     // if (i > 9) goto skipConcatLabel;
                     var skipConcatLabel = gen.DefineLabel();
                     yield return new CodeInstruction(OpCodes.Ldloc_S, 6);
-                    yield return new CodeInstruction(OpCodes.Ldc_I4_S, 9);
+                    yield return new CodeInstruction(OpCodes.Ldc_I4_S, 10);
                     yield return new CodeInstruction(OpCodes.Bge, skipConcatLabel);
 
                     // int j = (i + 1) % 10;
