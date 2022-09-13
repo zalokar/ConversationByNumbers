@@ -50,7 +50,7 @@ namespace ConversationByNumbers
             var answerListLength = dataSource.AnswerList.Count;
 
             // allow numkeys to continue conversation
-            if (answerListLength <= 0 && !isBarterActive)
+            if (answerIndex > -1 && answerListLength <= 0 && !isBarterActive)
             {
                 var ExecuteContinue = AccessTools.Method(typeof(MissionConversationVM), nameof(MissionConversationVM.ExecuteContinue));
                 ExecuteContinue.Invoke(dataSource, new object[] { });
@@ -159,12 +159,18 @@ namespace ConversationByNumbers
                     // ConversationSentenceOption local_var_7 = this._conversationManager.CurOptions[i];
                     LocalBuilder csoAddress = gen.DeclareLocal(typeof(ConversationSentenceOption));
                     yield return new CodeInstruction(OpCodes.Stloc_S, 7);
-                    yield return new CodeInstruction(OpCodes.Ldloca_S, 7); // this address used by Stfld instruction below
 
-                    // TODO: there is potential edge case where i/local_var_6 goes past 9; in that case, skip string modding below
+                    // when i > 9, no more numkeys are available, so stop adding prompts to answers after that
+                    // if (i > 9) goto skipConcatLabel;
+                    var skipConcatLabel = gen.DefineLabel();
+                    yield return new CodeInstruction(OpCodes.Ldloc_S, 6);
+                    yield return new CodeInstruction(OpCodes.Ldc_I4_S, 9);
+                    yield return new CodeInstruction(OpCodes.Bge, skipConcatLabel);
 
                     // int j = (i + 1) % 10;
                     // local_var_7.Text = new TextObject(j + ". " + x.Text.ToString());
+                    yield return new CodeInstruction(OpCodes.Ldloca_S, 7); // this address used by Stfld instruction below
+
                     yield return new CodeInstruction(OpCodes.Ldloc_S, 6);
                     yield return new CodeInstruction(OpCodes.Ldc_I4_1);
                     yield return new CodeInstruction(OpCodes.Add);
@@ -184,8 +190,10 @@ namespace ConversationByNumbers
                     yield return new CodeInstruction(OpCodes.Newobj, AccessTools.Constructor(typeof(TextObject), new Type[] { typeof(string), typeof(Dictionary<string, object>) }));
 
                     yield return new CodeInstruction(OpCodes.Stfld, AccessTools.Field(typeof(ConversationSentenceOption), nameof(ConversationSentenceOption.Text)));
-                    
-                    yield return new CodeInstruction(OpCodes.Ldloc_S, 7);
+
+                    var loadConversationSentenceObject = new CodeInstruction(OpCodes.Ldloc_S, 7);
+                    loadConversationSentenceObject.labels.Add(skipConcatLabel);
+                    yield return loadConversationSentenceObject;
 
                     foundCallvirtGetItem = true;
                 }
